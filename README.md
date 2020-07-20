@@ -11,7 +11,21 @@
 
 ## x64还是x86,看清楚
 
+## 项目 -> 属性 -> 链接器 -> 输入 -> 附加依赖项:
 
+ntdll.lib
+kernel32.lib
+user32.lib
+gdi32.lib
+winspool.lib
+comdlg32.lib
+advapi32.lib
+shell32.lib
+ole32.lib
+oleaut32.lib
+uuid.lib
+odbc32.lib
+odbccp32.lib
 
 
 
