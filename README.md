@@ -1,5 +1,5 @@
 # kdmapper
-驱动加载器 -> 利用iqvw64e.sys映射驱动
+驱动加载器 -> 利用漏洞驱动iqvw64e.sys将驱动加载进系统内核
 
 <h1 align="center">
 	<img src="temp.png" alt="">
@@ -7,25 +7,11 @@
 
 ## 不需要进入Win10的测试模式也能装载驱动
 
+## 支持Win10版本1809,1903,1909
+
 ## 请用管理员的权限运行CMD,否则权限不够装载失败
 
-## x64还是x86,看清楚
-
-## 项目 -> 属性 -> 链接器 -> 输入 -> 附加依赖项:
-
-ntdll.lib
-kernel32.lib
-user32.lib
-gdi32.lib
-winspool.lib
-comdlg32.lib
-advapi32.lib
-shell32.lib
-ole32.lib
-oleaut32.lib
-uuid.lib
-odbc32.lib
-odbccp32.lib
-
+## 原项目地址
+[kdmapper](https://github.com/Dark7oveRR/kdmapper)
 
 

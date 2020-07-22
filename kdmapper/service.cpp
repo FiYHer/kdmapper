@@ -1,7 +1,5 @@
 #include "service.hpp"
-#include <iostream>
 
-//注册驱动和运行驱动相关代码
 bool service::RegisterAndStart(const std::string& driver_path)
 {
 	const std::string driver_name = std::filesystem::path(driver_path).filename().string();

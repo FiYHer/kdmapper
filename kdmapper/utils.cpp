@@ -1,13 +1,12 @@
 #include "utils.hpp"
-//读取文件内容到内存中
+
 bool utils::ReadFileToMemory(const std::string& file_path, std::vector<uint8_t>* out_buffer)
 {
-	//读取黑客驱动
 	std::ifstream file_ifstream(file_path, std::ios::binary);
+
 	if (!file_ifstream)
 		return false;
 
-	//开始读取
 	out_buffer->assign((std::istreambuf_iterator<char>(file_ifstream)), std::istreambuf_iterator<char>());
 	file_ifstream.close();
 
@@ -16,10 +15,8 @@ bool utils::ReadFileToMemory(const std::string& file_path, std::vector<uint8_t>*
 
 bool utils::CreateFileFromMemory(const std::string& desired_file_path, const char* address, size_t size)
 {
-	//创建一个可写的二进制文件
 	std::ofstream file_ofstream(desired_file_path.c_str(), std::ios_base::out | std::ios_base::binary);
 
-	//尝试写入文件
 	if (!file_ofstream.write(address, size))
 	{
 		file_ofstream.close();
